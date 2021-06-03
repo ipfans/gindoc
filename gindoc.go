@@ -44,9 +44,10 @@ type GinDoc struct {
 
 // RouterGroup is an abstraction of a Gin router group.
 type RouterGroup struct {
-	group       *gin.RouterGroup
-	doc         *openapi3.T
-	tag         *openapi3.Tag
+	group  *gin.RouterGroup
+	engine *gin.Engine
+	tags   openapi3.Tags
+
 	Name        string
 	Description string
 }
@@ -113,24 +114,93 @@ func (g *GinDoc) OpenAPIHandler() gin.HandlerFunc {
 // }
 
 // Group creates a new group of routes.
-func (g *RouterGroup) Group(path, name, description string, handlers ...gin.HandlerFunc) *RouterGroup {
-
-	g.
-		// Create the tag in the specification
-		// for this groups.
-		g.gen.AddTag(name, description)
+func (g *RouterGroup) Group(path string, tag *openapi3.Tag, handlers ...gin.HandlerFunc) *RouterGroup {
+	// Create the tag in the specification
+	// for this groups.
+	if tag != nil {
+		if len(g.tags) == 0 {
+			g.tags = []*openapi3.Tag{}
+		}
+		g.tags = append([]*openapi3.Tag(g.tags), tag)
+	}
 
 	return &RouterGroup{
-		gen:         g.gen,
-		group:       g.group.Group(path, handlers...),
-		Name:        name,
-		Description: description,
+		tags:  g.tags,
+		group: g.group.Group(path, handlers...),
 	}
 }
 
 // Use adds middleware to the group.
 func (g *RouterGroup) Use(handlers ...gin.HandlerFunc) {
 	g.group.Use(handlers...)
+}
+
+type PathInfo struct {
+	Summary        string
+	Description    string
+	RequestInfo    interface{}
+	ResponseHeader interface{}
+	ResponseBody   interface{}
+
+	SecurityRequirements *openapi3.SecurityRequirements
+	ExampleRequest       string
+	ExampleResponse      string
+}
+
+type HandleInfo func(*openapi3.PathItem)
+
+// Summary adds a summary to a path.
+func Summary(summary string) func(*openapi3.Operation) {
+	return func(o *openapi3.Operation) {
+		o.Summary = summary
+	}
+}
+
+// Description adds a description to a path.
+func Description(desc string) func(*openapi3.Operation) {
+	return func(o *openapi3.Operation) {
+		o.Description = desc
+	}
+}
+
+// Deprecated marks the operation as deprecated.
+func Deprecated(deprecated bool) func(*openapi3.Operation) {
+	return func(o *openapi3.Operation) {
+		o.Deprecated = deprecated
+	}
+}
+
+
+// ResponseWithExamples is a variant of Response that accept many examples.
+func ResponseWithExamples(statusCode int, desc string, model interface{}, headers openapi3.Headers, examples map[string]interface{}) func(*openapi3.Operation) {
+	return func(o *openapi3.Operation) {
+		if len(o.Responses) == 0 {
+			o.Responses = openapi3.NewResponses()
+		}
+		resp := openapi3.NewRes..;;;;;;;';]ponse()
+		resp.
+		resp.WithDescription(desc)
+		openapi3.Response{
+			ExtensionProps: openapi3.ExtensionProps{},
+			Description:    desc,
+			Headers:        headers,
+			Content:        nil,
+			Links:          nil,
+		}
+		o.AddResponse(statusCode)
+		o.Responses = append([]*openapi3.Response(o.Responses), &openapi3.Responses{
+			Code:        statusCode,
+			Description: desc,
+			Model:       model,
+			Headers:     headers,
+			Examples:    examples,
+		})
+	}
+}
+
+// GET is a shortcut to register a new handler with the GET method.
+func (g *RouterGroup) GET(path string, item *openapi3.PathItem, handlers ...gin.HandlerFunc) *RouterGroup {
+	return g.Handle(path, "GET", item, handlers...)
 }
 
 // GET is a shortcut to register a new handler with the GET method.
@@ -280,25 +350,11 @@ func StatusDescription(desc string) func(*openapi.OperationInfo) {
 	}
 }
 
-// Summary adds a summary to an operation.
-func Summary(summary string) func(*openapi.OperationInfo) {
-	return func(o *openapi.OperationInfo) {
-		o.Summary = summary
-	}
-}
-
 // Summaryf adds a summary to an operation according
 // to a format specifier.
 func Summaryf(format string, a ...interface{}) func(*openapi.OperationInfo) {
 	return func(o *openapi.OperationInfo) {
 		o.Summary = fmt.Sprintf(format, a...)
-	}
-}
-
-// Description adds a description to an operation.
-func Description(desc string) func(*openapi.OperationInfo) {
-	return func(o *openapi.OperationInfo) {
-		o.Description = desc
 	}
 }
 
@@ -317,12 +373,7 @@ func ID(id string) func(*openapi.OperationInfo) {
 	}
 }
 
-// Deprecated marks the operation as deprecated.
-func Deprecated(deprecated bool) func(*openapi.OperationInfo) {
-	return func(o *openapi.OperationInfo) {
-		o.Deprecated = deprecated
-	}
-}
+
 
 // Response adds an additional response to the operation.
 func Response(statusCode, desc string, model interface{}, headers []*openapi.ResponseHeader, example interface{}) func(*openapi.OperationInfo) {
